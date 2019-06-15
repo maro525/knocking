@@ -34,17 +34,25 @@ public:
         DeleteQueue();
     }
 
-    bool Pop(TYPE *item) {
+    bool Pop() {
 
         if (count <= 0)
         {
             return false;
         }
 
-        *item = array[startPoint];
-
         count--;
         startPoint = (startPoint + 1) % capacity;
+        return true;
+    }
+
+    bool front(TYPE *item) {
+        if(count <= 0)
+        {
+            return false;
+        }
+
+        *item = array[startPoint];
         return true;
     }
 

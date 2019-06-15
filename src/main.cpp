@@ -5,55 +5,83 @@
 #define PT_WAIT(pt, timestamp, usec) PT_WAIT_UNTIL(pt, millis() - *timestamp > usec);*timestamp = millis();
 
 static struct pt pt1, pt2;
-Queue<int> mvQueue = Queue<int>(10);
+Queue<float> mvQueue = Queue<float>(10);
 
 const int sPin = A0;
 int outpin = 8;
-int thresh = 10;
+int high_thresh = 3;
+int low_thresh = 1;
+float last_knock_time = 0.0;
 
 ///////////////
-///// thread1
+///// thread1 : read
+
+boolean bPotential = false;
 
 int read_sensor() {
     int sValue = analogRead(sPin);
-    Serial.println(sValue);
+    // Serial.print(sValue);
+    // Serial.print(" ");
     return sValue;
 }
 
-void write_time(int s) {
-    int now = millis();
-    Serial.print("time : ");
-    Serial.print(now);
-    Serial.println(" : thread 1");
-    int mvTime = now + 1000;
+void write_time(int value, float time) {
+    float mvTime = time + 2.0;
     mvQueue.Push(mvTime);
+    Serial.print("WriteTime : ");
+    Serial.println(mvTime);
 }
 
 void judge(){
     int s = read_sensor();
-    if (s > thresh){
-        write_time(s);
+    float now = millis()/1000.0f;
+    float lastTime;
+    if(now - last_knock_time < 0.5){
+        return;
+    }
+    else if (s > high_thresh && !bPotential){
+        bPotential = true;
+        // Serial.print("Got Potential : value->");
+        // Serial.println(s);
+    }
+    else if (s < low_thresh && bPotential) {
+        bPotential = false;
+        Serial.print("Got Knock! ");
+        write_time(s, now);
     }
 }
 
 ////////////
-/////// thread2
+/////// thread2 : work
 
 void knock() {
+    Serial.println("[Knock]");
     digitalWrite(outpin, HIGH);
     delay(50);
     digitalWrite(outpin, LOW);
 }
 
+float Thread2TimeStamp = 0.0;
+
 void work(){
-    int now = millis();
-    Serial.print("time : ");
-    Serial.print(now);
-    Serial.println(" : thread 1");
-    int lastMVtime;
-    if (mvQueue.Pop(&lastMVtime)){
-        if(now - lastMVtime < 10) {
+    float lastMVtime;
+    if (mvQueue.front(&lastMVtime)){
+        float now = millis() / 1000.0f;
+        if(lastMVtime>now) {
+            return;
+        }
+        else if (lastMVtime < Thread2TimeStamp) {
+            Serial.print("lastMVTime : ");
+            Serial.print(lastMVtime);
+            Serial.print(" lastThread TIme : ");
+            Serial.print(Thread2TimeStamp);
+            Serial.println(" last time passed");
+            mvQueue.Pop();
+        }
+        else if(lastMVtime > Thread2TimeStamp) {
             knock();
+            last_knock_time = now;
+            mvQueue.Pop();
         }
     }
 }
@@ -80,6 +108,7 @@ static int thread2(struct pt *pt) {
     while(true) {
         PT_WAIT(pt,&timestamp, 10);
         work();
+        Thread2TimeStamp = timestamp/1000.0f;
     }
     PT_END(pt);
 }
@@ -98,4 +127,5 @@ void setup() {
 void loop() {
     thread1(&pt1);
     thread2(&pt2);
+    millis();
 }
