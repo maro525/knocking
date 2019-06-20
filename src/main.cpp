@@ -17,6 +17,7 @@ float last_knock_time = 0.0;
 ///// thread1 : read
 
 boolean bPotential = false;
+int max_knock = 0;
 
 int read_sensor() {
     int sValue = analogRead(sPin);
@@ -25,17 +26,27 @@ int read_sensor() {
     return sValue;
 }
 
-void write_time(int value, float time) {
+void write_time(int value, float time, int n) {
+    if(n != 1 && n != 2) return;
     float mvTime = time + 2.0;
     mvQueue.Push(mvTime);
     Serial.print("WriteTime : ");
     Serial.println(mvTime);
+    if(n == 2) {
+        mvTime += 0.8;
+        myQueue.Push(mvTime);
+        Serial.print("WriteTime : ");
+        Serial.println(mvTime);
+    }
 }
 
 void judge(){
     int s = read_sensor();
     float now = millis()/1000.0f;
     float lastTime;
+    if(s > max_knock) {
+        max_knock = s;
+    }
     if(now - last_knock_time < 0.5){
         return;
     }
@@ -47,7 +58,10 @@ void judge(){
     else if (s < low_thresh && bPotential) {
         bPotential = false;
         Serial.print("Got Knock! ");
-        write_time(s, now);
+        if(max_knock < 80)
+            write_time(s, now, 1);
+        else
+            write_time(s, now, 2);
     }
 }
 
