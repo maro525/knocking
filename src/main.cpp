@@ -15,12 +15,12 @@ int low_thresh =5;
 float min_knock_interval = 0.2; // minimum knock interval
 float max_interval = 0.9; // min:4.5 - max:6.5
 float min_write_time_interval = 0.1;
-float normal_wait = 1.2; // normal wait time.
+float normal_wait = 2.0; // normal wait time.
 float normal_piezo_value = 20; // interval time is decided according to this value
 float max_piezo_value = 800;
 
 float last_knock_time = 0.0; // last knock time
-float rest_time = 0.5; // rest time after knocking
+float rest_time = 0.3; // rest time after knocking
 
 int noise_value = 2;
 bool bAfterKnock = false;
@@ -42,10 +42,10 @@ int read_sensor() {
 float interval;
 void write_time(int value, float time) {
     // interval = max_interval - normal_wait * value / normal_piezo_value;
-    // interval = max_interval * value / normal_piezo_value;
+    interval = max_interval * value / normal_piezo_value;
     // interval = max_interval * value / max_piezo_value;
-    interval = 1.2;
-    // if(interval < min_write_time_interval) { interval = min_write_time_interval; }
+    // interval = 1.2;
+    if(interval < min_write_time_interval) { interval = min_write_time_interval; }
 
     float mvTime = time + interval;
     mvQueue.Push(mvTime);
@@ -59,6 +59,7 @@ void write_time(int value, float time) {
         knock_count = 1;
     }
 }
+
 
 void judge(){
     int s = read_sensor();
@@ -75,10 +76,11 @@ void judge(){
     Serial.print(s);
     Serial.println(" ");
 
+
     // if enough time is not passed after last knock,
     // no knocking occurs
     // if(now - last_knock_time < rest_time*knock_count){
-    if(now-last_knock_time<2*interval && bAfterKnock) {
+    if(now-last_knock_time<rest_time && bAfterKnock) {
         return;
     } else {
         bAfterKnock = false;
