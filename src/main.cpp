@@ -9,21 +9,21 @@ Queue<float> mvQueue = Queue<float>(10);
 
 const int sPin = A0;
 int outpin = 8;
-int high_thresh = 7;
-int low_thresh =5;
+int high_thresh = 5;
+int low_thresh =1;
 
 float min_knock_interval = 0.2; // minimum knock interval
-float max_interval = 0.9; // min:4.5 - max:6.5
-float min_write_time_interval = 0.1;
+float max_interval = 0.8; // min:4.5 - max:6.5
+float min_write_time_interval = 0.6;
 float normal_wait = 2.0; // normal wait time.
-float normal_piezo_value = 20; // interval time is decided according to this value
-float max_piezo_value = 800;
+float normal_piezo_value = 40; // interval time is decided according to this value
+float max_piezo_value = 70;
 
 float last_knock_time = 0.0; // last knock time
-float rest_time = 0.3; // rest time after knocking
+float normal_rest_time = 0.1; // rest time after knocking
+float rest_time;
 
-int noise_value = 2;
-bool bAfterKnock = false;
+int noise_value = 1;
 
 ///////////////
 ///// thread1 : read
@@ -31,8 +31,8 @@ bool bAfterKnock = false;
 boolean bPotential = false;
 float last_potential_time = 0.0;
 int max_knock = 0;
-int knock_count = 1;
-int max_knock_count = 20;
+int knock_count = 0;
+int max_knock_count = 15;
 
 int read_sensor() {
     int sValue = analogRead(sPin);
@@ -40,24 +40,27 @@ int read_sensor() {
 }
 
 float interval;
-void write_time(int value, float time) {
+void set_interval(int value){
     // interval = max_interval - normal_wait * value / normal_piezo_value;
-    interval = max_interval * value / normal_piezo_value;
-    // interval = max_interval * value / max_piezo_value;
-    // interval = 1.2;
-    if(interval < min_write_time_interval) { interval = min_write_time_interval; }
+    // interval = max_interval * value / normal_piezo_value;
+    interval = max_interval * value / max_piezo_value;
+    if(interval < min_write_time_interval) {
+        interval = min_write_time_interval;
+    }
+    // if(value > 500) interval += 1.0;
+}
 
+void write_time(int value, float time) {
+
+    set_interval(value);
     float mvTime = time + interval;
     mvQueue.Push(mvTime);
     Serial.print("[");
     Serial.print(time);
-    Serial.print("]WriteTime : ");
+    Serial.print("]interval = ");
+    Serial.print(interval);
+    Serial.print(" -> WriteTime : ");
     Serial.println(mvTime);
-
-    knock_count += 1;
-    if(knock_count > max_knock_count){
-        knock_count = 1;
-    }
 }
 
 
@@ -72,30 +75,27 @@ void judge(){
         return;
     }
 
-    Serial.print("pieze : ");
+    Serial.print("piezo : ");
     Serial.print(s);
     Serial.println(" ");
 
-
     // if enough time is not passed after last knock,
     // no knocking occurs
-    // if(now - last_knock_time < rest_time*knock_count){
-    if(now-last_knock_time<rest_time && bAfterKnock) {
+    if(now - last_knock_time < rest_time){
+        // Serial.print("[");
+        // Serial.print(now);
+        // Serial.println("] still resting");
         return;
-    } else {
-        bAfterKnock = false;
     }
 
     if (s > high_thresh && !bPotential && now-last_potential_time>min_knock_interval){ // if s is higher than high_thresh, begin to monitor.(bPotential flag turns true.)
         bPotential = true;
-        Serial.println();
         Serial.print("Got Potential! v:");
         Serial.println(s);
         last_potential_time = now;
     }
     else if (s < low_thresh && bPotential) { // if s is lower than lower thresh and if bPotential is true, it turn
         bPotential = false;
-        Serial.println();
         Serial.print("Got Knock! v:");
         Serial.print(max_knock);
         Serial.print(" ");
@@ -108,34 +108,50 @@ void judge(){
 ////////////
 /////// thread2 : work
 
+void set_rest_time(){
+    rest_time = normal_rest_time*knock_count;
+    Serial.print(" rest time => ");
+    Serial.println(rest_time);
+}
+
 void knock() {
-    Serial.println();
-    Serial.println("[Knock]");
+    Serial.print(" Knock");
     digitalWrite(outpin, HIGH);
     delay(50);
     digitalWrite(outpin, LOW);
-    bAfterKnock = true;
+
+    knock_count += 1;
+    if(knock_count > max_knock_count){
+        knock_count = 1;
+    }
+
+    set_rest_time();
 }
 
 float Thread2TimeStamp = 0.0;
-
+float check_thresh = 0.5;
 void work(){
     float lastMVtime;
     if (mvQueue.front(&lastMVtime)){
         float now = millis() / 1000.0f;
-        if(lastMVtime>now) {
+        if(lastMVtime>now+check_thresh) {
             return;
         }
-        else if (lastMVtime < Thread2TimeStamp) {
+        else if (lastMVtime < now) {
             Serial.println();
             Serial.print("mv time: ");
             Serial.print(lastMVtime);
             Serial.print(" now: ");
-            Serial.print(Thread2TimeStamp);
+            Serial.print(now);
             Serial.println("-> last time passed");
             mvQueue.Pop();
+            float wtime = now + 1.5;
+            mvQueue.Push(wtime);
         }
-        else if(lastMVtime > Thread2TimeStamp) {
+        else if(lastMVtime >= now && lastMVtime <= now+check_thresh) {
+            Serial.print("[");
+            Serial.print(now);
+            Serial.print("]");
             knock();
             last_knock_time = now;
             mvQueue.Pop();
